@@ -1,0 +1,14 @@
+{
+  "name": "bloop",
+  "version": "0.0.0",
+  "description": "A safe programming language for javascript",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Paul Harper <benekastah@gmail.com>",
+  "license": "BSD",
+  "dependencies": {
+    "escodegen": "0.0.28"
+  }
+}
