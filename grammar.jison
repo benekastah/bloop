@@ -1,88 +1,28 @@
-%{
-  var INDENT_STACK = [0];
-  var last = function (ls) {
-    return ls[ls.length - 1];
-  };
-  var getIndentLevel = function (yytext) {
-    var idt = 0;
-    for (var i = 0, len = yytext.length; i < len; i++) {
-      var chr = yytext.charAt(i);
-      if (chr === ' ') {
-        idt += 1;
-      } else if (chr === '\t') {
-        idt += 8 - (idt % 8);
-      }
-    }
-    return idt;
-  };
-%}
-%lex
-%%
-
-\\\n                        {/* ignore */}
-\n+\s*                      %{
-                              var cl = getIndentLevel(yytext);
-                              var pl = last(INDENT_STACK);
-                              if (cl > pl) {
-                                INDENT_STACK.push(cl);
-                                return 'INDENT';
-                              } else if (cl < pl) {
-                                var tokens = [];
-                                while (INDENT_STACK.length) {
-                                  tokens.push('DEDENT');
-                                  if (INDENT_STACK.pop() === cl) {
-                                    break;
-                                  }
-                                }
-                                if (tokens.length < 1) {
-                                  throw new Error('DEDENT does not match previous level');
-                                }
-                                return tokens;
-                              } else {
-                                return 'SAMEDENT';
-                              }
-                            %}
-\s                          {/* ignore */}
-[a-zA-Z]+                   { return 'SYMBOL'; }
-"let"                       { return 'LET'; }
-"="                         { return '='; }
-"`"                         { return '`'; }
-"("                         { return '('; }
-")"                         { return ')'; }
-"+"                         { return '+'; }
-"-"                         { return '-'; }
-"/"                         { return '/'; }
-"*"                         { return '*'; }
-[0-9]+"."[0-9]+\b           { return 'FLOAT'; }
-[0-9]+                      { return 'FIXNUM'; }
-<<EOF>>                     { return 'EOF'; }
-/lex
 
 %left LET + - * /
 
 %start program
 
+%ebnf
+
 %%
 
 program
   : statement_list EOF
-    %{
-      var program = {type: 'Module', body: $statement_list};
-      console.log(JSON.stringify(program, null, 2));
-      return program;
-    %}
+    { return yy.Module($statement_list); }
+  | NEWLINE program
   ;
 
 statement_list
-  : statement_list SAMEDENT statement
+  : statement_list statement
     { $$ = $statement_list; $$.push($statement); }
   | statement
     { $$ = [$statement]; }
-  | statement_list SAMEDENT
   ;
 
 statement
   : definition
+  | type_annotation
   ;
 
 expr_list
@@ -104,64 +44,80 @@ expr
   ;
 
 simple_expr
-  : number
-  | symbol
+  : literal
   | '(' expr ')' -> $expr
   | '(' bin_op ')' -> $bin_op
   ;
 
+literal
+  : number
+  | symbol
+  ;
+
 bin_op
   : '+'
-    { $$ = {type: 'Symbol', name: $1}; }
+    { $$ = yy.Symbol($1); }
   | '-'
-    { $$ = {type: 'Symbol', name: $1}; }
+    { $$ = yy.Symbol($1); }
   | '/'
-    { $$ = {type: 'Symbol', name: $1}; }
+    { $$ = yy.Symbol($1); }
   | '*'
-    { $$ = {type: 'Symbol', name: $1}; }
+    { $$ = yy.Symbol($1); }
   | '`' simple_expr '`' -> $2
+  ;
+
+type_annotation
+  : symbol DOUBLE_COLON type NEWLINE
+    { $$ = yy.TypeAnnotation($symbol, $type); }
+  ;
+
+type
+  : function_type
+  | simple_type
+  ;
+
+simple_type
+  : type_symbol
+  | '(' type ')' -> $type
+  ;
+
+function_type
+  : simple_type R_ARROW simple_type
+    { $$ = yy.FunctionType([$simple_type1, $simple_type2]); }
+  | function_type R_ARROW simple_type
+    { $$ = $function_type; $$.chain.push($simple_type); }
   ;
 
 application
   : simple_expr simple_expr_list
-    { $$ = {
-      type: 'Application',
-      callable: $simple_expr,
-      args: $simple_expr_list
-    }; }
+    { $$ = yy.Application($simple_expr, $simple_expr_list); }
   | simple_expr bin_op expr
-    { $$ = {
-      type: 'Application',
-      callable: $bin_op,
-      args: [$simple_expr, $expr]
-    }; }
+    { $$ = yy.Application($bin_op, [$simple_expr, $expr]); }
   ;
 
 definition
-  : symbol '=' expr
-    { $$ = {
-      type: 'VarDef',
-      left: $symbol,
-      right: $expr
-    }; }
-  | symbol symbol_list '=' expr
-    { $$ = {
-      type: 'FunctionDef',
-      args: $symbol_list,
-      body: $expr
-    }; }
+  : symbol '=' expr NEWLINE
+    { $$ = yy.VarDef($symbol, $expr); }
+  | symbol literal_list '=' expr NEWLINE
+    { $$ = yy.FunctionDef($symbol, $literal_list, $expr); }
+  | symbol literal_list '=' indent expr dedent
+    { $$ = yy.FunctionDef($symbol, $literal_list, $expr); }
   ;
 
-symbol_list
-  : symbol_list symbol
-    { $$ = $symbol_list; $$.push($symbol); }
-  | symbol
-    { $$ = [$symbol]; }
+literal_list
+  : literal_list literal
+    { $$ = $literal_list; $$.push($literal); }
+  | literal -> [$literal]
   ;
 
 symbol
   : SYMBOL
-    { $$ = {type: 'Symbol', name: yytext}; }
+    { $$ = yy.Symbol(yytext); }
+  ;
+
+type_symbol
+  : TYPE_SYMBOL
+    { $$ = yy.TypeSymbol(yytext); }
   ;
 
 number
@@ -171,10 +127,18 @@ number
 
 fixnum
   : FIXNUM
-    { $$ = {type: 'Fixnum', value: +yytext}; }
+    { $$ = yy.Integer(yytext); }
   ;
 
 float
   : FLOAT
-    { $$ = {type: 'Float', value: +yytext}; }
+    { $$ = yy.Float(yytext); }
+  ;
+
+indent
+  : NEWLINE INDENT
+  ;
+
+dedent
+  : NEWLINE DEDENT
   ;

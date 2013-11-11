@@ -9,6 +9,10 @@
   "author": "Paul Harper <benekastah@gmail.com>",
   "license": "BSD",
   "dependencies": {
-    "escodegen": "0.0.28"
+    "escodegen": "0.0.28",
+    "lex": "~1.7.4",
+    "jison": "~0.4.13",
+    "esmangle": "0.0.17",
+    "optimist": "~0.6.0"
   }
 }

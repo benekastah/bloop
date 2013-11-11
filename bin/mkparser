@@ -1,0 +1,2 @@
+#!/bin/bash
+node_modules/jison/lib/cli.js grammar.jison --outfile parser.js
