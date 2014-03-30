@@ -54,6 +54,11 @@ literal
   | symbol
   ;
 
+definable
+  : symbol
+  | '(' bin_op ')' -> $bin_op
+  ;
+
 bin_op
   : '+'
     { $$ = yy.Symbol($1); }
@@ -69,6 +74,8 @@ bin_op
 type_annotation
   : symbol DOUBLE_COLON type NEWLINE
     { $$ = yy.TypeAnnotation($symbol, $type); }
+  | '(' bin_op ')' DOUBLE_COLON type NEWLINE
+    { $$ = yy.TypeAnnotation($bin_op, $type); }
   ;
 
 type
@@ -82,26 +89,24 @@ simple_type
   ;
 
 function_type
-  : simple_type R_ARROW simple_type
-    { $$ = yy.FunctionType([$simple_type1, $simple_type2]); }
-  | function_type R_ARROW simple_type
-    { $$ = $function_type; $$.chain.push($simple_type); }
+  : simple_type R_ARROW type
+    { $$ = yy.FunctionType($simple_type, $type); }
   ;
 
 application
   : simple_expr simple_expr_list
-    { $$ = yy.Application($simple_expr, $simple_expr_list); }
+    { $$ = yy.makeApplication($simple_expr, $simple_expr_list); }
   | simple_expr bin_op expr
-    { $$ = yy.Application($bin_op, [$simple_expr, $expr]); }
+    { $$ = yy.makeApplication($bin_op, [$simple_expr, $expr]); }
   ;
 
 definition
   : symbol '=' expr NEWLINE
     { $$ = yy.VarDef($symbol, $expr); }
-  | symbol literal_list '=' expr NEWLINE
-    { $$ = yy.FunctionDef($symbol, $literal_list, $expr); }
-  | symbol literal_list '=' indent expr dedent
-    { $$ = yy.FunctionDef($symbol, $literal_list, $expr); }
+  | definable literal_list '=' expr NEWLINE
+    { $$ = yy.VarDef($definable, yy.makeFunction($literal_list, $expr)); }
+  | definable literal_list '=' indent expr dedent
+    { $$ = yy.VarDef($definable, yy.makeFunction($literal_list, $expr)); }
   ;
 
 literal_list

@@ -71,6 +71,8 @@ exports.makeLexer = function () {
 
   addRule(lexer, /\s+/);
 
+  addRule(lexer, /#.*\n*/);
+
   addRule(lexer, /[a-z_]\w*/, 'SYMBOL');
 
   addRule(lexer, /[A-Z]\w*/, 'TYPE_SYMBOL');
