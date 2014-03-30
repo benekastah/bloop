@@ -26,3 +26,5 @@ exports.type = function (x) {
 exports.log = function (o) {
   console.log(util.inspect(o, {depth: 100, colors: true}));
 };
+
+// vim: ts=2 sts=2 sw=2 et
