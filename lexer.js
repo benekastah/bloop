@@ -101,7 +101,7 @@ exports.makeLexer = function () {
 
     addRule(lexer, /::/, 'DOUBLE_COLON');
 
-    addRule(lexer, /\->/, 'R_ARROW');
+    addRule(lexer, /\->|→/, 'R_ARROW');
 
     addRule(lexer, /$/, 'EOF');
 

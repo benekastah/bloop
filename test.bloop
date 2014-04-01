@@ -1,2 +1,4 @@
 
+(-) :: Integer → Integer → Integer
+
 main = 1 - 5 * 5
