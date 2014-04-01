@@ -27,9 +27,10 @@ fs.readFile(infile, 'utf8', function (err, data) {
   var mod = parser.parse(data);
   // console.log(util.inspect(mod, {depth: 100, colors: true}));
 
-  var constraints = verifier.generateConstraints(mod);
+  var ts = new verifier.TypeSystem();
+  ts.analyse(mod);
   // console.log(util.inspect(constraints, {depth: 100, colors: true}));
   // debugger;
-  var subst = verifier.unify(constraints);
-  console.log(util.inspect(constraints, {depth: 100, colors: true}));
+  // var subst = verifier.unify(constraints);
+  // console.log(util.inspect(constraints, {depth: 100, colors: true}));
 });

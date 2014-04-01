@@ -2,182 +2,158 @@
 var ast = require('./ast');
 var helpers = require('./helpers');
 
-var constraintFns = {
-  Module: function () {},
-
-  TypeAnnotation: function (node) {
-    return generateConstraint(node.symbol).concat([
-      ast.TypeConstraint(
-        ast.TypeExpr(node.symbol),
-        node.type)
-    ]);
-  },
-
-  VarDef: function (node) {
-    return generateConstraint(node.left)
-      .concat(generateConstraint(node.right));
-  },
-
-  Integer: function (node) {
-    return [
-      ast.TypeConstraint(
-        ast.TypeExpr(node), ast.TypeSymbol('Integer'))
-    ];
-  },
-
-  Float: function (node) {
-    return [
-      ast.TypeConstraint(
-        ast.TypeExpr(node), ast.TypeSymbol('Float'))
-    ];
-  },
-
-  Symbol: function (node) {
-    return [
-      ast.TypeConstraint(
-        ast.TypeExpr(node), ast.TypeVariable(node.name))
-    ];
-  },
-
-  Function: function (node) {
-    var bodyC = generateConstraint(node.expr);
-    var argC = generateConstraint(node.arg)[0];
-    var fnT = ast.FunctionType(
-      argC.right, ast.TypeExpr(node.expr));
-    var fnC = ast.TypeConstraint(
-      ast.TypeExpr(node), fnT);
-    return bodyC.concat(fnC);
-  },
-
-  Application: function (node) {
-    var fnC = generateConstraint(node.callable);
-    var argC = generateConstraint(node.arg);
-    var fnT = ast.FunctionType(
-      ast.TypeExpr(node.arg), ast.TypeExpr(node));
-    var expC = ast.TypeConstraint(
-      ast.TypeExpr(node.callable), fnT);
-    return fnC.concat(argC, expC);
-  }
-};
-
-var generateConstraint = function (node) {
-  if (node.nodeType in constraintFns) {
-    var result = constraintFns[node.nodeType](node);
-    return result;
-  } else {
-    throw new Error('Unimplemented node type ' + node.nodeType);
-  }
-}
-
-exports.generateConstraints = function (node) {
-  var constraints = [];
-  console.assert(node.nodeType === 'Module');
-  for (var i = 0, len = node.body.length; i < len; i++) {
-    var result = generateConstraint(node.body[i]);
-    if (result) {
-      constraints = constraints.concat(result);
+exports.TypeSystem = (function () {
+    function TypeSystem() {
+        this.env = new helpers.Context();
+        this.nongen = [];
+        this._nextVariableName = 'α';
+        this._nextVariableId = 0;
     }
-  }
-  return constraints;
-};
 
-var occurs = function (left, right) {
-  return ast.twalk(function (node) {
-    if (ast.eq(left, node)) {
-      return true;
-    }
-  }, right) || false;
-};
+    TypeSystem.Integer = ast.TypeSymbol('Integer');
+    TypeSystem.Float = ast.TypeSymbol('Float');
 
-var lookup = function (term, subs) {
-  if (subs.length) debugger;
-  for (var i = 0, len = subs.length; i < len; i++) {
-    var s = subs[i];
-    if (ast.eq(term, s.left)) {
-      return s.right;
-    }
-  }
-  return null;
-};
+    var proto = TypeSystem.prototype;
 
-var extendReplace = function (left, right, subst) {
-  if (!occurs(left, right)) {
-    for (var i = 0, len = subst.length; i < len; i++) {
-      var s = subst[i];
-      console.log('Checking for:');
-      helpers.log(left);
-      ast.mapWalk(function (node) {
-        console.log('Got:');
-        helpers.log(node);
-        console.log('');
-        if (ast.eq(left, node)) {
-          debugger;
-          return right;
-        } else {
-          return node;
+    proto.nextUniqueName = function () {
+        var result = this._nextVariableName;
+        this._nextVariableName = String.fromCharCode(
+            this._nextVariableName.charCodeAt(0) + 1);
+        return result;
+    };
+
+    proto.newVariable = function () {
+        return ast.TypeVariable(this._nextVariableId++, this.nextUniqueName());
+    };
+
+    proto.analyse = function (node) {
+        switch (node.nodeType) {
+            case 'Symbol': {
+                if (this.env.has(node.name)) {
+                    return this.env.get(node.name);
+                } else {
+                    var result = this.newVariable();
+                    this.env.set(node.name, result);
+                    return result;
+                }
+            }
+
+            case 'Application': {
+                var funtype = this.analyse(node.callable);
+                var argtype = this.analyse(node.arg);
+                var resulttype = this.newVariable();
+                this.unify(ast.FunctionType(argtype, resulttype), funtype);
+                return resulttype;
+            }
+
+            case 'Integer': {
+                return TypeSystem.Integer;
+            }
+
+            case 'Float': {
+                return TypeSystem.Float;
+            }
+
+            case 'Function': {
+                var argtype = this.newVariable();
+                this.env.push();
+                this.nongen.push(argtype);
+                var resulttype = this.analyse(node.expr);
+                this.env.pop();
+                this.nongen.pop();
+                return ast.FunctionType(argtype, resulttype);
+            }
+
+            case 'VarDef': {
+                ast.assertIs(node.left, 'Symbol');
+                var result = this.analyse(node.right);
+                this.env.set(node.left.name, result);
+                return result;
+            }
+
+            case 'TypeAnnotation': {
+                ast.assertIs(node.symbol, 'Symbol');
+                this.env.set(node.symbol.name, node.type);
+                return null;
+            }
+
+            case 'Module': {
+                var result;
+                for (var i = 0, len = node.body.length; i < len; i++) {
+                    result = this.analyse(node.body[i]);
+                }
+                return result;
+            }
+
+            default: {
+                throw new Error('Can\'t analyse "' + node.nodeType +
+                                '": Unimplemented');
+            }
         }
-      }, s);
-    }
-    subst.push(ast.TypeSubstitution(left, right));
-  }
-  return subst;
-};
+    };
 
-var TypeVariableExpression = function (c, cs, s) {
-  var bound = lookup(c.left, s);
-  if (bound) {
-    return unify([
-      ast.TypeConstraint(bound, c.right)
-    ].concat(cs.slice(1)), s);
-  } else {
-    return unify(cs.slice(1), extendReplace(c.left, c.right, s));
-  }
-};
+    proto.typeMismatch = function (t1, t2) {
+        throw new TypeError(t1.toString() + ' ≠ ' + t2.toString());
+    };
 
-var unifyFns = {
-  TypeVariable: TypeVariableExpression,
+    proto.unify = function (t1, t2) {
+        var type1 = this.prune(t1);
+        var type2 = this.prune(t2);
+        if (type1.nodeType === 'TypeVariable') {
+            if (this.occurs(type1, type2)) {
+                throw new TypeError('Recursive unification');
+            }
+            type1.type = type2;
+        } else if (type2.nodeType === 'TypeVariable') {
+            this.unify(type2, type1);
+        } else {
+            if (type1.nodeType !== type2.nodeType) {
+                this.typeMismatch(type1, type2);
+            }
+            switch (type1.nodeType) {
+                case 'TypeSymbol': {
+                    if (!(type1 === type2 || type1.name === type2.name)) {
+                        this.typeMismatch(type1, type2);
+                    }
+                    break;
+                }
 
-  TypeExpr: TypeVariableExpression,
+                case 'FunctionType': {
+                    this.unify(type1.arg, type2.arg);
+                    this.unify(type1.ret, type2.ret);
+                    break;
+                }
 
-  TypeSymbol: function (c, cs, s) {
-    if (c.right.nodeType === 'TypeSymbol') {
-      if (c.left.name === c.right.name) {
-        return unify(cs.slice(1), s);
-      } else {
-        throw new Error('Expecting ' + c.left.name + ' and got ' +
-                        c.right.name + ' instead');
-      }
-    } else {
-      throw new Error('Expecting ' + c.left.name + ' and got ' +
-                      c.right + ' instead');
-    }
-  },
+                default: {
+                    throw new Error('Can\'t unify "' + type1.nodeType +
+                                    '": Unimplemented');
+                }
+            }
+        }
+    };
 
-  FunctionType: function (c, cs, s) {
-    if (c.right.nodeType === 'FunctionType') {
-      return unify([
-        ast.TypeExpression(c.left.arg, c.right.arg),
-        ast.TypeExpression(c.left.ret, c.right.ret)
-      ].concat(cs), s);
-    } else {
-      throw new Error('Expecting (' + c.left + ') and got (' +
-                      c.right + ')');
-    }
-  }
-};
+    proto.prune = function (t) {
+        if (t.nodeType === 'TypeVariable' && t.type) {
+            t.type = this.prune(t.type);
+            return t.type;
+        } else {
+            return t;
+        }
+    };
 
-var unify = exports.unify = function (constraints, subst) {
-  // helpers.log(subst);
-  // debugger;
-  if (!constraints.length) {
-    return subst;
-  }
-  var c = constraints[0];
-  if (c.left.nodeType in unifyFns) {
-    return unifyFns[c.left.nodeType](c, constraints, subst || []);
-  } else {
-    throw new Error('Can\'t unify ' + c.left.nodeType + ': Not implemented');
-  }
-};
+    proto.occurs = function (v, t) {
+        ast.assertIs(v, 'TypeVariable');
+        var t2 = this.prune(t);
+        if (v === t2) {
+            return true;
+        } else if (t2.nodeType === 'FunctionType') {
+            return this.occurs(v, t2.arg) ||
+                this.occurs(v, t2.ret);
+        }
+        return false;
+    };
 
-// vim: ts=2 sts=2 sw=2 et
+    return TypeSystem;
+})();
+
+// vim: ts=4 sts=4 sw=4 et
