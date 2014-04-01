@@ -73,6 +73,10 @@ exports.Context = (function () {
         ctx[name] = val;
     };
 
+    proto.setGlobal = function (name, val) {
+        this.stack[0][name] = val;
+    };
+
     return Context;
 })();
 

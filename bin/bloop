@@ -4,9 +4,9 @@ var fs = require('fs');
 var util = require('util');
 
 var argv = require('optimist')
-  .usage('Usage: $0 -c [infile] -o [outfile]')
-  .demand(['c'])
-  .argv;
+    .usage('Usage: $0 -c [infile] -o [outfile]')
+    .demand(['c'])
+    .argv;
 
 var lex = require('../lexer');
 var ast = require('../ast');
@@ -16,21 +16,23 @@ var infile = argv.c;
 var outfile = argv.o;
 
 fs.readFile(infile, 'utf8', function (err, data) {
-  if (err) {
-    throw err;
-  }
+    if (err) {
+        throw err;
+    }
 
-  var parser = require('../parser').parser;
-  parser.lexer = lex.makeLexer();
-  parser.yy = ast;
+    var parser = require('../parser').parser;
+    parser.lexer = lex.makeLexer();
+    parser.yy = ast;
 
-  var mod = parser.parse(data);
-  // console.log(util.inspect(mod, {depth: 100, colors: true}));
+    var mod = parser.parse(data);
+    // console.log(util.inspect(mod, {depth: 100, colors: true}));
 
-  var ts = new verifier.TypeSystem();
-  ts.analyse(mod);
-  // console.log(util.inspect(constraints, {depth: 100, colors: true}));
-  // debugger;
-  // var subst = verifier.unify(constraints);
-  // console.log(util.inspect(constraints, {depth: 100, colors: true}));
+    var ts = new verifier.TypeSystem();
+    ts.analyse(mod);
+    var env = ts.env.last();
+    for (var prop in env) {
+        console.log(prop + ': ' + env[prop]);
+    }
 });
+
+// vim: ts=4 sts=4 sw=4 et

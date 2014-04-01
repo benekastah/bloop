@@ -193,7 +193,11 @@ makeAst('TypeVariable', {
         id: {walkable: false}
     },
     toString: function () {
-        return this.name;
+        if (this.type) {
+            return this.name + '(' + this.type + ')';
+        } else {
+            return this.name;
+        }
     }
 });
 
@@ -212,7 +216,7 @@ makeAst('TypeInference', {
 makeAst('FunctionType', {
     props: ['arg', 'ret'],
     toString: function () {
-        return 'λ ' + this.arg + ' → ' + this.ret;
+        return this.arg + ' → ' + this.ret;
     },
 });
 

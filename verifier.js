@@ -33,7 +33,7 @@ exports.TypeSystem = (function () {
                     return this.env.get(node.name);
                 } else {
                     var result = this.newVariable();
-                    this.env.set(node.name, result);
+                    this.env.setGlobal(node.name, result);
                     return result;
                 }
             }
