@@ -74,7 +74,10 @@ exports.TypeSystem = (function () {
                 ast.assertIs(node.symbol, 'Symbol');
                 var typeVars = {};
                 ast.mapWalk(function (node) {
-                    // If user-defined...
+                    // Resolve user-defined type variables. Give new ones a
+                    // new id and save them in typeVars. Any type variable
+                    // with the same `name` will be set to the same instance
+                    // within a single type annotation.
                     if (node.nodeType === 'TypeVariable' && node.id == null) {
                         if (node.name in typeVars) {
                             return typeVars[node.name];
