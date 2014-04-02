@@ -27,6 +27,14 @@ exports.log = function (o) {
     console.log(util.inspect(o, {depth: 100, colors: true}));
 };
 
+var _slice = Array.prototype.slice;
+exports.bind = function (fn, scope) {
+    var args = _slice.call(arguments, 2);
+    return function () {
+        return fn.apply(scope, args.concat(_slice.call(arguments)));
+    };
+};
+
 exports.Context = (function () {
     function Context(g) {
         this.stack = [g || exports.clone(null)];

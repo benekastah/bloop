@@ -11,7 +11,7 @@ var makeAst = function (nodeType, config) {
     props = config.props;
     propsData = config.propsData;
     toString = config.toString || function () {
-        return JSON.stringify(this, null, 2);
+        return this.nodeType;
     };
 
     var base = {
@@ -91,8 +91,8 @@ exports.eq = function (a, b) {
 };
 
 
-exports.walk = function walk(action, node, parentNode, prop, index) {
-    var _continue = action(node, parentNode, prop, index);
+exports.walk = function walk(action, node, scope, parentNode, prop, index) {
+    var _continue = action.call(scope, node, parentNode, prop, index);
     if (_continue === false) {
         return;
     }
@@ -106,26 +106,26 @@ exports.walk = function walk(action, node, parentNode, prop, index) {
             var newNode = node[p];
             if (helpers.type(newNode) === 'Array') {
                 for (var j = 0, jlen = newNode.length; j < jlen; j++) {
-                    walk(action, newNode[j], node, p, j);
+                    walk(action, newNode[j], scope, node, p, j);
                 }
             } else {
-                walk(action, newNode, node, p);
+                walk(action, newNode, scope, node, p);
             }
         }
     }
 };
 
-exports.twalk = function twalk(action, node) {
+exports.twalk = function twalk(action, node, scope) {
     var throwable = {};
     var fn = function (node, parentNode, prop, index) {
-        var result = action(node, parentNode, prop, index);
+        var result = action.call(this, node, parentNode, prop, index);
         if (typeof result !== 'undefined') {
             throwable.result = result;
             throw throwable;
         }
     };
     try {
-        exports.walk(fn, node);
+        exports.walk(fn, node, scope);
     } catch (e) {
         if (e === throwable) {
             return e.result;
@@ -135,9 +135,9 @@ exports.twalk = function twalk(action, node) {
     }
 };
 
-exports.mapWalk = function mapWalk(action, node) {
+exports.mapWalk = function mapWalk(action, node, scope) {
     exports.walk(function (node, parentNode, prop, index) {
-        var result = action(node);
+        var result = action.call(this, node);
         if (result !== node) {
             if (index == null) {
                 parentNode[prop] = result;
@@ -146,7 +146,7 @@ exports.mapWalk = function mapWalk(action, node) {
             }
             return false;
         }
-    }, node);
+    }, node, scope);
 };
 
 
@@ -168,14 +168,6 @@ makeAst('Symbol', {
     }
 });
 
-makeAst('TypeConstraint', {
-    props: ['left', 'right']
-});
-
-makeAst('TypeSubstitution', {
-    props: ['left', 'right']
-});
-
 makeAst('TypeSymbol', {
     props: ['name'],
     propsData: {
@@ -186,6 +178,13 @@ makeAst('TypeSymbol', {
     }
 });
 
+makeAst('TypeUndefined', {
+    props: [],
+    toString: function () {
+        return this.nodeType;
+    }
+});
+
 makeAst('TypeVariable', {
     props: ['id', 'name', 'type'],
     propsData: {
@@ -193,13 +192,35 @@ makeAst('TypeVariable', {
         id: {walkable: false}
     },
     toString: function () {
-        if (this.type) {
+        if (this.type.nodeType !== 'TypeUndefined') {
             return this.name + '(' + this.type + ')';
         } else {
             return this.name;
         }
     }
 });
+
+exports.makeTypeVariable = function (id, name, type) {
+    switch (arguments.length) {
+        case 1: {
+            name = id;
+            id = null;
+            break;
+        }
+
+        case 2: case 3: break;
+
+        default: {
+            throw new Error('Wrong numbrer of arguments: ' + arguments.length);
+        }
+    }
+
+    if (!type) {
+        type = exports.TypeUndefined();
+    }
+
+    return exports.TypeVariable(id, name, type);
+};
 
 makeAst('TypeExpr', {
     props: ['expr']

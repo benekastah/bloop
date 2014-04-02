@@ -15,27 +15,25 @@ exports.TypeSystem = (function () {
 
     var proto = TypeSystem.prototype;
 
-    proto.nextUniqueName = function () {
+    proto._nextUniqueName = function () {
         var result = this._nextVariableName;
         this._nextVariableName = String.fromCharCode(
             this._nextVariableName.charCodeAt(0) + 1);
         return result;
     };
 
+    proto._nextId = function () {
+        return this._nextVariableId++;
+    },
+
     proto.newVariable = function () {
-        return ast.TypeVariable(this._nextVariableId++, this.nextUniqueName());
+        return ast.makeTypeVariable(this._nextId(), this._nextUniqueName());
     };
 
     proto.analyse = function (node) {
         switch (node.nodeType) {
             case 'Symbol': {
-                if (this.env.has(node.name)) {
-                    return this.env.get(node.name);
-                } else {
-                    var result = this.newVariable();
-                    this.env.setGlobal(node.name, result);
-                    return result;
-                }
+                return this.getType(node.name);
             }
 
             case 'Application': {
@@ -57,6 +55,7 @@ exports.TypeSystem = (function () {
             case 'Function': {
                 var argtype = this.newVariable();
                 this.env.push();
+                this.env.set(node.arg.name, argtype);
                 this.nongen.push(argtype);
                 var resulttype = this.analyse(node.expr);
                 this.env.pop();
@@ -73,6 +72,19 @@ exports.TypeSystem = (function () {
 
             case 'TypeAnnotation': {
                 ast.assertIs(node.symbol, 'Symbol');
+                var typeVars = {};
+                ast.mapWalk(function (node) {
+                    // If user-defined...
+                    if (node.nodeType === 'TypeVariable' && node.id == null) {
+                        if (node.name in typeVars) {
+                            return typeVars[node.name];
+                        } else {
+                            node.id = this._nextId();
+                            typeVars[node.name] = node;
+                        }
+                    }
+                    return node;
+                }, node.type, this);
                 this.env.set(node.symbol.name, node.type);
                 return null;
             }
@@ -90,6 +102,48 @@ exports.TypeSystem = (function () {
                                 '": Unimplemented');
             }
         }
+    };
+
+    proto.getType = function (name) {
+        if (this.env.has(name)) {
+            return this.fresh(this.env.get(name));
+        } else {
+            throw new Error('Undefined symbol: ' + name);
+        }
+    };
+
+    proto.fresh = function (type) {
+        var mappings = {};
+        var freshrec = helpers.bind(function (t) {
+            var t1 = this.prune(t);
+            switch (t1.nodeType) {
+                case 'TypeVariable': {
+                    if (this.isGeneric(t1)) {
+                        var result = mappings[t1.name] || this.newVariable();
+                        mappings[t1.name] = result;
+                        return result;
+                    } else {
+                        return t1;
+                    }
+                }
+
+                case 'FunctionType': {
+                    return ast.FunctionType(
+                        freshrec(t1.arg),
+                        freshrec(t1.ret));
+                }
+
+                default: {
+                    return t1;
+                }
+            }
+        }, this);
+        return freshrec(type);
+    };
+
+    proto.isGeneric = function (v) {
+        ast.assertIs(v, 'TypeVariable');
+        return this.nongen.indexOf(v) < 0;
     };
 
     proto.typeMismatch = function (t1, t2) {
@@ -133,7 +187,7 @@ exports.TypeSystem = (function () {
     };
 
     proto.prune = function (t) {
-        if (t.nodeType === 'TypeVariable' && t.type) {
+        if (t.nodeType === 'TypeVariable' && t.type.nodeType !== 'TypeUndefined') {
             t.type = this.prune(t.type);
             return t.type;
         } else {
