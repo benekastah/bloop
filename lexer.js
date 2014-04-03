@@ -73,11 +73,17 @@ exports.makeLexer = function () {
 
     addRule(lexer, /#.*\n*/);
 
+    addRule(lexer, /typedef/, 'TYPEDEF');
+
     addRule(lexer, /[a-z_]\w*/, 'SYMBOL');
+
+    addRule(lexer, /Any/, 'TYPE_ANY');
 
     addRule(lexer, /[A-Z]\w*/, 'TYPE_SYMBOL');
 
     addRule(lexer, /let/, 'LET');
+
+    addRule(lexer, /\|/, '|');
 
     addRule(lexer, /=/, '=');
 

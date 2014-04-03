@@ -26,84 +26,113 @@ exports.TypeSystem = (function () {
         return this._nextVariableId++;
     },
 
-    proto.newVariable = function () {
-        return ast.makeTypeVariable(this._nextId(), this._nextUniqueName());
+    proto.newVariable = function (name, type) {
+        var result = ast.makeTypeVariable(
+            this._nextId(), name || this._nextUniqueName());
+        if (type) {
+            result.type = type;
+        }
+        return result;
     };
 
     proto.analyse = function (node) {
-        switch (node.nodeType) {
-            case 'Symbol': {
-                return this.getType(node.name);
-            }
+        if (node.nodeType in this.analyse.actions) {
+            return this.analyse.actions[node.nodeType].call(this, node);
+        } else {
+            throw new Error('Can\'t analyse "' + node.nodeType +
+                            '": Unimplemented');
+        }
+    };
 
-            case 'Application': {
-                var funtype = this.analyse(node.callable);
-                var argtype = this.analyse(node.arg);
-                var resulttype = this.newVariable();
-                this.unify(ast.FunctionType(argtype, resulttype), funtype);
-                return resulttype;
-            }
+    proto.analyse.actions = {
+        Symbol: function (node) {
+            return this.getType(node.name);
+        },
 
-            case 'Integer': {
-                return TypeSystem.Integer;
-            }
+        Application: function (node) {
+            var funtype = this.analyse(node.callable);
+            var argtype = this.analyse(node.arg);
+            var resulttype = this.newVariable();
+            this.unify(ast.FunctionType(argtype, resulttype), funtype);
+            return resulttype;
+        },
 
-            case 'Float': {
-                return TypeSystem.Float;
-            }
+        Integer: function (node) {
+            return TypeSystem.Integer;
+        },
 
-            case 'Function': {
-                var argtype = this.newVariable();
-                this.env.push();
-                this.env.set(node.arg.name, argtype);
-                this.nongen.push(argtype);
-                var resulttype = this.analyse(node.expr);
-                this.env.pop();
-                this.nongen.pop();
-                return ast.FunctionType(argtype, resulttype);
-            }
+        Float: function (node) {
+            return TypeSystem.Float;
+        },
 
-            case 'VarDef': {
-                ast.assertIs(node.left, 'Symbol');
-                var result = this.analyse(node.right);
-                this.env.set(node.left.name, result);
-                return result;
-            }
+        Function: function (node) {
+            var argtype = this.newVariable();
+            this.env.push();
+            this.env.set(node.arg.name, argtype);
+            this.nongen.push(argtype);
+            var resulttype = this.analyse(node.expr);
+            this.env.pop();
+            this.nongen.pop();
+            return ast.FunctionType(argtype, resulttype);
+        },
 
-            case 'TypeAnnotation': {
-                ast.assertIs(node.symbol, 'Symbol');
-                var typeVars = {};
-                ast.mapWalk(function (node) {
-                    // Resolve user-defined type variables. Give new ones a
-                    // new id and save them in typeVars. Any type variable
-                    // with the same `name` will be set to the same instance
-                    // within a single type annotation.
-                    if (node.nodeType === 'TypeVariable' && node.id == null) {
-                        if (node.name in typeVars) {
-                            return typeVars[node.name];
-                        } else {
-                            node.id = this._nextId();
-                            typeVars[node.name] = node;
-                        }
+        VarDef: function (node) {
+            ast.assertTypeIs(node.left, 'Symbol');
+            var result = this.analyse(node.right);
+            this.env.set(node.left.name, result);
+            return result;
+        },
+
+        TypeAnnotation: function (node) {
+            ast.assertTypeIs(node.symbol, 'Symbol');
+            var typeVars = {};
+            ast.mapWalk(function (node) {
+                // Resolve user-defined type variables. Give new ones a
+                // new id and save them in typeVars. Any type variable
+                // with the same `name` will be set to the same instance
+                // within a single type annotation.
+                if (ast.typeIs(node, 'TypeVariable') && node.id == null) {
+                    if (node.name in typeVars) {
+                        return typeVars[node.name];
+                    } else {
+                        node.id = this._nextId();
+                        typeVars[node.name] = node;
                     }
-                    return node;
-                }, node.type, this);
-                this.env.set(node.symbol.name, node.type);
-                return null;
-            }
-
-            case 'Module': {
-                var result;
-                for (var i = 0, len = node.body.length; i < len; i++) {
-                    result = this.analyse(node.body[i]);
+                } else if (ast.typeIs(node, 'AnyType')) {
+                    return this.newVariable('Any');
                 }
-                return result;
-            }
+                return node;
+            }, node.type, this);
+            this.env.set(node.symbol.name, node.type);
+            return null;
+        },
 
-            default: {
-                throw new Error('Can\'t analyse "' + node.nodeType +
-                                '": Unimplemented');
+        TypeDef: function (node) {},
+
+        Module: function (node) {
+            var result;
+
+            var typedefs = {};
+            ast.mapWalk(function (node) {
+                if (ast.typeIs(node, 'TypeDef')) {
+                    if (node.name in typedefs) {
+                        throw new Error('Can\'t redefine type "' +
+                                        node.name + '"');
+                    }
+                    typedefs[node.name] = node;
+                } else if (ast.typeIs(node, 'TypeSymbol')) {
+                    if (node.name in typedefs) {
+                        return this.newVariable(
+                            node.name, typedefs[node.name].type);
+                    }
+                }
+                return node;
+            }, node, this);
+
+            for (var i = 0, len = node.body.length; i < len; i++) {
+                result = this.analyse(node.body[i]);
             }
+            return result;
         }
     };
 
@@ -119,38 +148,45 @@ exports.TypeSystem = (function () {
         var mappings = {};
         var freshrec = helpers.bind(function (t) {
             var t1 = this.prune(t);
-            switch (t1.nodeType) {
-                case 'TypeVariable': {
-                    if (this.isGeneric(t1)) {
-                        var result = mappings[t1.name] || this.newVariable();
-                        mappings[t1.name] = result;
-                        return result;
-                    } else {
-                        return t1;
-                    }
-                }
-
-                case 'FunctionType': {
-                    return ast.FunctionType(
-                        freshrec(t1.arg),
-                        freshrec(t1.ret));
-                }
-
-                default: {
-                    return t1;
-                }
+            if (t1.nodeType in this.fresh.actions) {
+                return this.fresh.actions[t1.nodeType].call(
+                    this, t1, mappings, freshrec);
+            } else {
+                return t1;
             }
         }, this);
         return freshrec(type);
     };
 
+    proto.fresh.actions = {
+        TypeVariable: function (typeNode, mappings, freshrec) {
+            if (this.isGeneric(typeNode)) {
+                var result = mappings[typeNode.name] || this.newVariable();
+                mappings[typeNode.name] = result;
+                return result;
+            } else {
+                return typeNode;
+            }
+        },
+
+        FunctionType: function (typeNode, mappings, freshrec) {
+            return ast.FunctionType(
+                freshrec(typeNode.arg),
+                freshrec(typeNode.ret));
+        }
+    };
+
     proto.isGeneric = function (v) {
-        ast.assertIs(v, 'TypeVariable');
+        ast.assertTypeIs(v, 'TypeVariable');
         return this.nongen.indexOf(v) < 0;
     };
 
     proto.typeMismatch = function (t1, t2) {
         throw new TypeError(t1.toString() + ' ≠ ' + t2.toString());
+    };
+
+    proto.checkTypeMismatch = function (t1, t2) {
+        ast.typeEq(t1, t2) || this.typeMismatch(t1, t2);
     };
 
     proto.unify = function (t1, t2) {
@@ -161,31 +197,40 @@ exports.TypeSystem = (function () {
                 throw new TypeError('Recursive unification');
             }
             type1.type = type2;
-        } else if (type2.nodeType === 'TypeVariable') {
+        } else if (['TypeVariable', 'OrType'].indexOf(type2.nodeType) >= 0) {
             this.unify(type2, type1);
         } else {
-            if (type1.nodeType !== type2.nodeType) {
+            if (type1.nodeType in this.unify.actions) {
+                this.unify.actions[type1.nodeType].call(this, type1, type2);
+            } else {
+                throw new Error('Can\'t unify "' + type1.nodeType +
+                                '": Unimplemented');
+            }
+        }
+    };
+
+    proto.unify.actions = {
+        TypeSymbol: function (type1, type2) {
+            this.checkTypeMismatch(type1, type2);
+            if (!(type1 === type2 || type1.id === type2.id)) {
                 this.typeMismatch(type1, type2);
             }
-            switch (type1.nodeType) {
-                case 'TypeSymbol': {
-                    if (!(type1 === type2 || type1.name === type2.name)) {
-                        this.typeMismatch(type1, type2);
-                    }
-                    break;
-                }
+        },
 
-                case 'FunctionType': {
-                    this.unify(type1.arg, type2.arg);
-                    this.unify(type1.ret, type2.ret);
-                    break;
-                }
+        FunctionType: function (type1, type2) {
+            this.checkTypeMismatch(type1, type2);
+            this.unify(type1.arg, type2.arg);
+            this.unify(type1.ret, type2.ret);
+        },
 
-                default: {
-                    throw new Error('Can\'t unify "' + type1.nodeType +
-                                    '": Unimplemented');
-                }
+        OrType: function (type1, type2) {
+            for (var i = 1, len = 2; i <= len; i++) {
+                try {
+                    this.unify(type1['type' + i], type2);
+                    return;
+                } catch (e) {}
             }
+            this.typeMismatch(type1, type2);
         }
     };
 
@@ -199,7 +244,7 @@ exports.TypeSystem = (function () {
     };
 
     proto.occurs = function (v, t) {
-        ast.assertIs(v, 'TypeVariable');
+        ast.assertTypeIs(v, 'TypeVariable');
         var t2 = this.prune(t);
         if (v === t2) {
             return true;

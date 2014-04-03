@@ -1,8 +1,18 @@
 
 var helpers = require('./helpers');
 
-exports.assertIs = function (node, type) {
-    console.assert(node.nodeType === type);
+exports.typeIs = function (node, type) {
+    return node.nodeType === type;
+};
+
+exports.assertTypeIs = function (node, type) {
+    console.assert(
+        exports.typeIs(node, type),
+        'Expected type "' + type + '", got "' + node.nodeType + '"');
+};
+
+exports.typeEq = function (t1, t2) {
+    return t1.nodeType === t2.nodeType;
 };
 
 var makeAst = function (nodeType, config) {
@@ -10,17 +20,19 @@ var makeAst = function (nodeType, config) {
     init = config.init;
     props = config.props;
     propsData = config.propsData;
-    toString = config.toString || function () {
-        return this.nodeType;
-    };
+    toString = config.hasOwnProperty('toString') ?
+        config.toString :
+        function () {
+            return this.nodeType;
+        };
 
     var base = {
-        toString: toString
+        toString: toString,
+        nodeType: nodeType
     };
 
     var astFn = exports[nodeType] = function () {
         var ast = helpers.clone(base);
-        ast.nodeType = nodeType;
         if (init) {
             init.apply(ast, arguments);
         } else {
@@ -178,6 +190,27 @@ makeAst('TypeSymbol', {
     }
 });
 
+makeAst('TypeDef', {
+    props: ['name', 'type'],
+    propsData: {
+        name: {walkable: false}
+    }
+});
+
+makeAst('OrType', {
+    props: ['type1', 'type2'],
+    toString: function () {
+        return '' + this.type1 + ' | ' + this.type2;
+    }
+});
+
+makeAst('AnyType', {
+    props: [],
+    toString: function () {
+        return 'Any';
+    }
+});
+
 makeAst('TypeUndefined', {
     props: [],
     toString: function () {
@@ -211,7 +244,7 @@ exports.makeTypeVariable = function (id, name, type) {
         case 2: case 3: break;
 
         default: {
-            throw new Error('Wrong numbrer of arguments: ' + arguments.length);
+            throw new Error('Wrong number of arguments: ' + arguments.length);
         }
     }
 
@@ -222,15 +255,7 @@ exports.makeTypeVariable = function (id, name, type) {
     return exports.TypeVariable(id, name, type);
 };
 
-makeAst('TypeExpr', {
-    props: ['expr']
-});
-
 makeAst('TypeAnnotation', {
-    props: ['symbol', 'type']
-});
-
-makeAst('TypeInference', {
     props: ['symbol', 'type']
 });
 

@@ -23,6 +23,7 @@ statement_list
 statement
     : definition
     | type_annotation
+    | typedef
     ;
 
 expr_list
@@ -71,6 +72,11 @@ bin_op
     | '`' simple_expr '`' -> $2
     ;
 
+typedef
+    : TYPEDEF TYPE_SYMBOL '=' type NEWLINE
+        { $$ = yy.TypeDef($2, $type); }
+    ;
+
 type_annotation
     : symbol DOUBLE_COLON type NEWLINE
         { $$ = yy.TypeAnnotation($symbol, $type); }
@@ -78,13 +84,25 @@ type_annotation
         { $$ = yy.TypeAnnotation($bin_op, $type); }
     ;
 
+or_type
+    : simple_type '|' type
+        { $$ = yy.OrType($simple_type, $type); }
+    ;
+
+any_type
+    : TYPE_ANY
+        { $$ = yy.AnyType(); }
+    ;
+
 type
     : function_type
     | simple_type
+    | or_type
     ;
 
 simple_type
     : type_symbol
+    | any_type
     | SYMBOL
         { $$ = yy.makeTypeVariable($1); }
     | '(' type ')' -> $type
