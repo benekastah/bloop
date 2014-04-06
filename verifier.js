@@ -4,7 +4,7 @@ var helpers = require('./helpers');
 
 exports.TypeSystem = (function () {
     function TypeSystem() {
-        this.env = new helpers.Context();
+        this.context = new helpers.Context();
         this.nongen = [];
         this._nextVariableName = 'α';
         this._nextVariableId = 0;
@@ -37,7 +37,11 @@ exports.TypeSystem = (function () {
 
     proto.analyse = function (node) {
         if (node.nodeType in this.analyse.actions) {
-            return this.analyse.actions[node.nodeType].call(this, node);
+            var result = this.analyse.actions[node.nodeType].call(this, node);
+            node.type = helpers.bind(function () {
+                return this.prune(result);
+            }, this);
+            return result;
         } else {
             throw new Error('Can\'t analyse "' + node.nodeType +
                             '": Unimplemented');
@@ -67,11 +71,11 @@ exports.TypeSystem = (function () {
 
         Function: function (node) {
             var argtype = this.newVariable();
-            this.env.push();
-            this.env.set(node.arg.name, argtype);
+            this.context.push();
+            this.context.set(node.arg.name, argtype);
             this.nongen.push(argtype);
             var resulttype = this.analyse(node.expr);
-            this.env.pop();
+            this.context.pop();
             this.nongen.pop();
             return ast.FunctionType(argtype, resulttype);
         },
@@ -79,14 +83,14 @@ exports.TypeSystem = (function () {
         VarDef: function (node) {
             ast.assertTypeIs(node.left, 'Symbol');
             var result = this.analyse(node.right);
-            this.env.set(node.left.name, result);
+            this.context.set(node.left.name, result);
             return result;
         },
 
         TypeAnnotation: function (node) {
             ast.assertTypeIs(node.symbol, 'Symbol');
             var typeVars = {};
-            ast.mapWalk(function (node) {
+            ast.mutWalk(function (node) {
                 // Resolve user-defined type variables. Give new ones a
                 // new id and save them in typeVars. Any type variable
                 // with the same `name` will be set to the same instance
@@ -103,7 +107,7 @@ exports.TypeSystem = (function () {
                 }
                 return node;
             }, node.type, this);
-            this.env.set(node.symbol.name, node.type);
+            this.context.set(node.symbol.name, node.type);
             return null;
         },
 
@@ -113,7 +117,7 @@ exports.TypeSystem = (function () {
             var result;
 
             var typedefs = {};
-            ast.mapWalk(function (node) {
+            ast.mutWalk(function (node) {
                 if (ast.typeIs(node, 'TypeDef')) {
                     if (node.name in typedefs) {
                         throw new Error('Can\'t redefine type "' +
@@ -137,8 +141,8 @@ exports.TypeSystem = (function () {
     };
 
     proto.getType = function (name) {
-        if (this.env.has(name)) {
-            return this.fresh(this.env.get(name));
+        if (this.context.has(name)) {
+            return this.fresh(this.context.get(name));
         } else {
             throw new Error('Undefined symbol: ' + name);
         }

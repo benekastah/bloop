@@ -1,14 +1,8 @@
 
 typedef Num = Integer | Float
 
-(-) :: Num -> Num -> Num
-
 (*) :: Num -> Num -> Num
 
-id x = x
-
-y = id 5.0
-
-main argv = 5 * (id 6.66)
+main argv = 5 * 6.6
 
 # vim: ts=4 sts=4 sw=4 et

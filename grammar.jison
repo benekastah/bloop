@@ -57,10 +57,10 @@ literal
 
 definable
     : symbol
-    | '(' bin_op ')' -> $bin_op
+    | '(' bin_symbol ')' -> $bin_symbol
     ;
 
-bin_op
+bin_symbol
     : '+'
         { $$ = yy.Symbol($1); }
     | '-'
@@ -69,6 +69,10 @@ bin_op
         { $$ = yy.Symbol($1); }
     | '*'
         { $$ = yy.Symbol($1); }
+    ;
+
+bin_op
+    : bin_symbol
     | '`' simple_expr '`' -> $2
     ;
 
@@ -80,8 +84,8 @@ typedef
 type_annotation
     : symbol DOUBLE_COLON type NEWLINE
         { $$ = yy.TypeAnnotation($symbol, $type); }
-    | '(' bin_op ')' DOUBLE_COLON type NEWLINE
-        { $$ = yy.TypeAnnotation($bin_op, $type); }
+    | '(' bin_symbol ')' DOUBLE_COLON type NEWLINE
+        { $$ = yy.TypeAnnotation($bin_symbol, $type); }
     ;
 
 or_type

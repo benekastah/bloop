@@ -127,27 +127,17 @@ exports.walk = function walk(action, node, scope, parentNode, prop, index) {
     }
 };
 
-exports.twalk = function twalk(action, node, scope) {
-    var throwable = {};
-    var fn = function (node, parentNode, prop, index) {
-        var result = action.call(this, node, parentNode, prop, index);
-        if (typeof result !== 'undefined') {
-            throwable.result = result;
-            throw throwable;
+exports.walkTop = function walkTop(action, node, scope) {
+    exports.walk(function () {
+        var result = action.apply(this, arguments);
+        if (result == null) {
+            result = false;
         }
-    };
-    try {
-        exports.walk(fn, node, scope);
-    } catch (e) {
-        if (e === throwable) {
-            return e.result;
-        } else {
-            throw e;
-        }
-    }
+        return result;
+    }, node, scope);
 };
 
-exports.mapWalk = function mapWalk(action, node, scope) {
+exports.mutWalk = function mutWalk(action, node, scope) {
     exports.walk(function (node, parentNode, prop, index) {
         var result = action.call(this, node);
         if (result !== node) {

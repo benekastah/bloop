@@ -8,9 +8,13 @@ var argv = require('optimist')
     .demand(['c'])
     .argv;
 
+var escodegen = require('escodegen');
+var esmangle = require('esmangle');
+
 var lex = require('../lexer');
 var ast = require('../ast');
-var verifier = require('../verifier');
+var helpers = require('../helpers');
+var Compiler = require('../compiler').Compiler;
 
 var infile = argv.c;
 var outfile = argv.o;
@@ -27,12 +31,12 @@ fs.readFile(infile, 'utf8', function (err, data) {
     var mod = parser.parse(data);
     // console.log(util.inspect(mod, {depth: 100, colors: true}));
 
-    var ts = new verifier.TypeSystem();
-    ts.analyse(mod);
-    var env = ts.env.last();
-    for (var prop in env) {
-        console.log(prop + ': ' + env[prop]);
+    var compiler = new Compiler(mod);
+    var context = compiler.typeSystem.context.last();
+    for (var prop in context) {
+        console.log(prop + ': ' + context[prop]);
     }
+    helpers.log(escodegen.generate(compiler.compile()));
 });
 
 // vim: ts=4 sts=4 sw=4 et
