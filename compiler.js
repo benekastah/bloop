@@ -2,6 +2,7 @@
 var verifier = require('./verifier');
 var ast = require('./ast');
 var helpers = require('./helpers');
+var jsAst = require('./js_ast');
 
 exports.Compiler = (function () {
     function Compiler(module) {
@@ -29,35 +30,11 @@ exports.Compiler = (function () {
     };
 
     proto.compileNodeList = function (arr) {
-        var result = [];
-        for (var i = 0, len = arr.length; i < len; i++) {
-            result.push(this.compileNode(arr[i]));
-        }
-        return result;
-    };
-
-    var object = function () {
-        var obj = {
-            type: 'ObjectExpression',
-            properties: []
-        };
-        for (var i = 0, len = arguments.length; i < len; i++) {
-            var prop = arguments[i];
-            obj.properties.push({
-                type: 'Property',
-                key: {
-                    type: 'Identifier',
-                    name: prop[0]
-                },
-                value: prop[1],
-                kind: 'init'
-            });
-        }
-        return obj;
+        return helpers.map(arr, this.compileNode, this);
     };
 
     proto.typedValue = function (type, value) {
-        return object(
+        return jsAst.ObjectExpression(
             ['type', this.compileNode(type)],
             ['value', value]
         );
@@ -67,7 +44,9 @@ exports.Compiler = (function () {
         Module: function (node) {
             return {
                 type: 'Program',
-                body: this.compileNodeList(node.body)
+                body: helpers.map(
+                    this.compileNodeList(node.body),
+                    jsAst.toStatement)
             };
         },
 
@@ -89,52 +68,52 @@ exports.Compiler = (function () {
         },
 
         Symbol: function (node) {
-            return {
-                type: 'Identifier',
-                name: node.name
-            };
+            return jsAst.Identifier(node.name);
         },
 
         Integer: function (node) {
-            return this.typedValue(node.type(), node.value);
+            return this.typedValue(node.type(), jsAst.Literal(node.value));
         },
 
         Float: function (node) {
-            return this.typedValue(node.type(), node.value);
+            return jsAst.Literal(node.value);
         },
 
         Function: function (node) {
-            return this.typedValue(node.type(), {
-                type: 'FunctionExpression',
-                params: [this.compileNode(node.arg)],
-                body: {
-                    type: 'BlockStatement',
-                    body: [this.compileNode(node.expr)]
-                }
-            });
+            return jsAst.CallExpression(
+                jsAst.Identifier('$_function_$'),
+                this.compileNode(node.type()),
+                jsAst.FunctionExpression(
+                    [this.compileNode(node.arg)],
+                    jsAst.BlockStatement(
+                        jsAst.ReturnStatement(this.compileNode(node.expr)))));
         },
 
         FunctionType: function (node) {
-            return object(
-                ['type', {type: 'Literal', value: node.nodeType}],
+            return jsAst.ObjectExpression(
+                ['nodeType', jsAst.Literal(node.nodeType)],
                 ['arg', this.compileNode(node.arg)],
                 ['ret', this.compileNode(node.ret)]
             );
         },
 
         TypeVariable: function (node) {
-            return object(
-                ['type', {type: 'Literal', value: node.nodeType}],
-                ['id', {type: 'Literal', value: node.id}],
-                ['name', {type: 'Literal', value: node.name}]
+            return jsAst.ObjectExpression(
+                ['nodeType', jsAst.Literal(node.nodeType)],
+                ['id', jsAst.Literal(node.id)],
+                ['name', jsAst.Literal(node.name)]
             );
         },
 
         TypeSymbol: function (node) {
-            return object(
-                ['type', {type: 'Literal', value: node.nodeType}],
-                ['name', {type: 'Literal', value: node.name}]
-            );
+            return jsAst.Identifier(node.name);
+        },
+
+        OrType: function (node) {
+            return jsAst.ObjectExpression(
+                ['nodeType', jsAst.Literal(node.nodeType)],
+                ['type1', this.compileNode(node.type1)],
+                ['type2', this.compileNode(node.type2)])
         },
 
         Application: function (node) {

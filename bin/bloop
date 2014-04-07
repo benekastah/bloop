@@ -3,10 +3,7 @@
 var fs = require('fs');
 var util = require('util');
 
-var argv = require('optimist')
-    .usage('Usage: $0 -c [infile] -o [outfile]')
-    .demand(['c'])
-    .argv;
+var argv = require('minimist')(process.argv.slice(2));
 
 var escodegen = require('escodegen');
 var esmangle = require('esmangle');
@@ -18,6 +15,8 @@ var Compiler = require('../compiler').Compiler;
 
 var infile = argv.c;
 var outfile = argv.o;
+
+var showTypeInfo = argv.T || argv['show-type-info'];
 
 fs.readFile(infile, 'utf8', function (err, data) {
     if (err) {
@@ -32,11 +31,24 @@ fs.readFile(infile, 'utf8', function (err, data) {
     // console.log(util.inspect(mod, {depth: 100, colors: true}));
 
     var compiler = new Compiler(mod);
-    var context = compiler.typeSystem.context.last();
-    for (var prop in context) {
-        console.log(prop + ': ' + context[prop]);
+
+    if (showTypeInfo) {
+        var context = compiler.typeSystem.context.last();
+        for (var prop in context) {
+            console.log(prop + ': ' + context[prop]);
+        }
+        process.exit();
     }
-    helpers.log(escodegen.generate(compiler.compile()));
+
+    var jsAst = compiler.compile();
+    var js = escodegen.generate(jsAst);
+    if (outfile) {
+        fs.writeFile(outfile, js, function (err) {
+            if (err) { throw err; }
+        });
+    } else {
+        console.log(js);
+    }
 });
 
 // vim: ts=4 sts=4 sw=4 et

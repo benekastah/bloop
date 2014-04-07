@@ -77,8 +77,7 @@ yy: {},
 symbols_: {"error":2,"program":3,"statement_list":4,"EOF":5,"NEWLINE":6,"statement":7,"definition":8,"type_annotation":9,"typedef":10,"expr_list":11,"expr":12,"simple_expr_list":13,"simple_expr":14,"application":15,"literal":16,"(":17,")":18,"bin_op":19,"number":20,"symbol":21,"definable":22,"bin_symbol":23,"+":24,"-":25,"/":26,"*":27,"`":28,"TYPEDEF":29,"TYPE_SYMBOL":30,"=":31,"type":32,"DOUBLE_COLON":33,"or_type":34,"simple_type":35,"|":36,"any_type":37,"TYPE_ANY":38,"function_type":39,"type_symbol":40,"SYMBOL":41,"R_ARROW":42,"literal_list":43,"indent":44,"dedent":45,"fixnum":46,"float":47,"FIXNUM":48,"FLOAT":49,"INDENT":50,"DEDENT":51,"$accept":0,"$end":1},
 terminals_: {2:"error",5:"EOF",6:"NEWLINE",17:"(",18:")",24:"+",25:"-",26:"/",27:"*",28:"`",29:"TYPEDEF",30:"TYPE_SYMBOL",31:"=",33:"DOUBLE_COLON",36:"|",38:"TYPE_ANY",41:"SYMBOL",42:"R_ARROW",48:"FIXNUM",49:"FLOAT",50:"INDENT",51:"DEDENT"},
 productions_: [0,[3,2],[3,2],[4,2],[4,1],[7,1],[7,1],[7,1],[11,2],[11,1],[13,2],[13,1],[12,1],[12,1],[14,1],[14,3],[14,3],[16,1],[16,1],[22,1],[22,3],[23,1],[23,1],[23,1],[23,1],[19,1],[19,3],[10,5],[9,4],[9,6],[34,3],[37,1],[32,1],[32,1],[32,1],[35,1],[35,1],[35,1],[35,3],[39,3],[15,2],[15,3],[8,4],[8,5],[8,6],[43,2],[43,1],[21,1],[40,1],[20,1],[20,1],[46,1],[47,1],[44,2],[45,2]],
-performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */
-/**/) {
+performAction: function anonymous(yytext, yyleng, yylineno, yy, yystate /* action[1] */, $$ /* vstack */, _$ /* lstack */) {
 /* this == yyval */
 
 var $0 = $$.length - 1;

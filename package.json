@@ -1,17 +1,18 @@
 {
-    "name": "bloop",
-    "version": "0.0.0",
-    "description": "A safe programming language for javascript",
-    "main": "index.js",
-    "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    "author": "Paul Harper <benekastah@gmail.com>",
-    "license": "BSD",
-    "dependencies": {
-        "escodegen": "0.0.28",
-        "lex": "~1.7.4",
-        "jison": "~0.4.13",
-        "esmangle": "0.0.17"
-    }
+  "name": "bloop",
+  "version": "0.0.0",
+  "description": "A safe programming language for javascript",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Paul Harper <benekastah@gmail.com>",
+  "license": "BSD",
+  "dependencies": {
+    "escodegen": "0.0.28",
+    "esmangle": "0.0.17",
+    "jison": "~0.4.13",
+    "lex": "~1.7.4",
+    "minimist": "0.0.8"
+  }
 }

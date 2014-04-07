@@ -17,6 +17,18 @@ exports.keys = Object.keys || function (o) {
     return keys;
 };
 
+exports.map = function (a, fn, scope) {
+    if (a.map) {
+        return a.map(fn, scope);
+    } else {
+        var result = [];
+        for (var i = 0, len = a.length; i < len; i++) {
+            result.push(fn.call(scope, a[i], i, a));
+        }
+        return result;
+    }
+};
+
 var _toString = Object.prototype.toString;
 exports.type = function (x) {
     var t = _toString.call(x);
@@ -28,6 +40,13 @@ exports.log = function (o) {
 };
 
 var _slice = Array.prototype.slice;
+exports.slice = function (a) {
+    switch (arguments.length) {
+        case 1: return _slice.call(a);
+        default: return _slice.apply(a, _slice.call(arguments, 1));
+    }
+};
+
 exports.bind = function (fn, scope) {
     var args = _slice.call(arguments, 2);
     return function () {
