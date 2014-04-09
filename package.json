@@ -3,16 +3,28 @@
   "version": "0.0.0",
   "description": "A safe programming language for javascript",
   "main": "index.js",
+  "dependencies": {
+    "escodegen": "~0.0.28",
+    "esmangle": "~0.0.17",
+    "jison": "~0.4.13",
+    "lex": "~1.7.5",
+    "minimist": "~0.0.8"
+  },
+  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "bin": {
+    "bloop": "bin/bloop"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/benekastah/bloop.git"
+  },
   "author": "Paul Harper <benekastah@gmail.com>",
   "license": "BSD",
-  "dependencies": {
-    "escodegen": "0.0.28",
-    "esmangle": "0.0.17",
-    "jison": "~0.4.13",
-    "lex": "~1.7.4",
-    "minimist": "0.0.8"
-  }
+  "bugs": {
+    "url": "https://github.com/benekastah/bloop/issues"
+  },
+  "homepage": "https://github.com/benekastah/bloop"
 }

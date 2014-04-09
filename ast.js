@@ -160,6 +160,10 @@ makeAst('Module', {
     props: ['body']
 });
 
+makeAst('Import', {
+    props: ['moduleName']
+});
+
 makeAst('Symbol', {
     props: ['name'],
     propsData: {
@@ -184,6 +188,37 @@ makeAst('TypeDef', {
     props: ['name', 'type'],
     propsData: {
         name: {walkable: false}
+    }
+});
+
+var stringEscapedChars = {
+    '"': '"',
+    '\\': '\\',
+    b: '\b',
+    f: '\f',
+    n: '\n',
+    r: '\r',
+    t: '\t',
+    v: '\v'
+};
+
+var re_escape = /\\(.)/g;
+
+makeAst('String', {
+    props: ['value'],
+    propsData: {
+        value: {walkable: false}
+    },
+    init: function (value) {
+        value = value.substring(1, value.length - 1);
+        value = value.replace(re_escape, function (match, sub) {
+            if (sub in stringEscapedChars) {
+                return stringEscapedChars[sub];
+            } else {
+                throw new Error('Invalid string');
+            }
+        });
+        this.value = value;
     }
 });
 

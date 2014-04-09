@@ -75,6 +75,8 @@ exports.makeLexer = function () {
 
     addRule(lexer, /typedef/, 'TYPEDEF');
 
+    addRule(lexer, /import/, 'IMPORT');
+
     addRule(lexer, /[a-z_]\w*/, 'SYMBOL');
 
     addRule(lexer, /Any/, 'TYPE_ANY');
@@ -100,6 +102,8 @@ exports.makeLexer = function () {
     addRule(lexer, /\//, '/');
 
     addRule(lexer, /\*/, '*');
+
+    addRule(lexer, /"(\\.|[^"])*"/, 'STRING');
 
     addRule(lexer, /[0-9]+\.[0-9]+/, 'FLOAT');
 

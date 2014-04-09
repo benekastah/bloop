@@ -37,11 +37,7 @@ exports.TypeSystem = (function () {
 
     proto.analyse = function (node) {
         if (node.nodeType in this.analyse.actions) {
-            var result = this.analyse.actions[node.nodeType].call(this, node);
-            node.type = helpers.bind(function () {
-                return this.prune(result);
-            }, this);
-            return result;
+            return this.analyse.actions[node.nodeType].call(this, node);
         } else {
             throw new Error('Can\'t analyse "' + node.nodeType +
                             '": Unimplemented');

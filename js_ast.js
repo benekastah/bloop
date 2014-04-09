@@ -15,7 +15,7 @@ var makeIsTest = function (regex, types) {
 var makeAstMethod = function (name, fn) {
     exports[name] = function () {
         var ast = {type: name};
-        return fn.apply(ast, arguments) || ast;
+        return (fn ? fn.apply(ast, arguments) : null) || ast;
     };
 };
 
@@ -79,4 +79,32 @@ makeAstMethod('CallExpression', function (callee) {
 makeAstMethod('ReturnStatement', function (argument) {
     this.argument = argument;
 });
+
+makeAstMethod('VariableDeclaration', function () {
+    this.kind = 'var';
+    this.declarations = helpers.map(arguments, function (a) {
+        return exports.VariableDeclarator.apply(null, a);
+    });
+});
+
+makeAstMethod('VariableDeclarator', function (id, init) {
+    this.id = id;
+    this.init = init;
+});
+
+makeAstMethod('MemberExpression', function (obj, prop) {
+    var args = helpers.slice(arguments, 2);
+    this.object = obj;
+    this.property = prop[0];
+    this.computed = prop[1];
+    if (args.length) {
+        return exports.MemberExpression.apply(null, [this].concat(args));
+    }
+});
+
+makeAstMethod('Program', function (body) {
+    this.body = body;
+});
+
+makeAstMethod('EmptyStatement');
 

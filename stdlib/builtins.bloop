@@ -1,0 +1,13 @@
+
+typedef Num = Integer | Float
+
+(+) :: Num -> Num -> Num
+
+(-) :: Num -> Num -> Num
+
+(*) :: Num -> Num -> Num
+
+(/) :: Num -> Num -> Num
+
+# FIXME sloppy typing
+print :: Any -> Any

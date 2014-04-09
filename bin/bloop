@@ -5,34 +5,25 @@ var util = require('util');
 
 var argv = require('minimist')(process.argv.slice(2));
 
-var escodegen = require('escodegen');
-var esmangle = require('esmangle');
-
-var lex = require('../lexer');
-var ast = require('../ast');
+var bloop = require('../index');
 var helpers = require('../helpers');
-var Compiler = require('../compiler').Compiler;
 
 var infile = argv.c;
 var outfile = argv.o;
+var mangle = argv.m;
+var optimize = argv.O;
 
 var showTypeInfo = argv.T || argv['show-type-info'];
+var showJsAst = argv.J || argv['show-js-ast'];
 
 fs.readFile(infile, 'utf8', function (err, data) {
     if (err) {
         throw err;
     }
 
-    var parser = require('../parser').parser;
-    parser.lexer = lex.makeLexer();
-    parser.yy = ast;
-
-    var mod = parser.parse(data);
-    // console.log(util.inspect(mod, {depth: 100, colors: true}));
-
-    var compiler = new Compiler(mod);
-
+    var compiler = bloop.getCompiler(data);
     if (showTypeInfo) {
+        compiler.analyseTypes();
         var context = compiler.typeSystem.context.last();
         for (var prop in context) {
             console.log(prop + ': ' + context[prop]);
@@ -40,14 +31,23 @@ fs.readFile(infile, 'utf8', function (err, data) {
         process.exit();
     }
 
-    var jsAst = compiler.compile();
-    var js = escodegen.generate(jsAst);
+    var result = bloop.compile(compiler, {
+        optimize: optimize,
+        mangle: mangle,
+        getAst: showJsAst
+    });
+
+    if (showJsAst) {
+        helpers.log(result);
+        process.exit();
+    }
+
     if (outfile) {
-        fs.writeFile(outfile, js, function (err) {
+        fs.writeFile(outfile, result, function (err) {
             if (err) { throw err; }
         });
     } else {
-        console.log(js);
+        console.log(result);
     }
 });
 

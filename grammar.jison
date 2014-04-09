@@ -24,6 +24,12 @@ statement
     : definition
     | type_annotation
     | typedef
+    | import
+    ;
+
+import
+    : IMPORT string NEWLINE
+        { $$ = yy.Import($string); }
     ;
 
 expr_list
@@ -53,6 +59,7 @@ simple_expr
 literal
     : number
     | symbol
+    | string
     ;
 
 definable
@@ -62,13 +69,13 @@ definable
 
 bin_symbol
     : '+'
-        { $$ = yy.Symbol($1); }
+        { $$ = yy.Symbol('$_add_$'); }
     | '-'
-        { $$ = yy.Symbol($1); }
+        { $$ = yy.Symbol('$_subtract_$'); }
     | '/'
-        { $$ = yy.Symbol($1); }
+        { $$ = yy.Symbol('$_divide_$'); }
     | '*'
-        { $$ = yy.Symbol($1); }
+        { $$ = yy.Symbol('$_multiply_$'); }
     ;
 
 bin_op
@@ -147,6 +154,11 @@ symbol
 type_symbol
     : TYPE_SYMBOL
         { $$ = yy.TypeSymbol(yytext); }
+    ;
+
+string
+    : STRING
+        { $$ = yy.String(yytext); }
     ;
 
 number

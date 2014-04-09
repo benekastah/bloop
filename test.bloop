@@ -1,9 +1,8 @@
 
-typedef Num = Integer | Float
+import "bloop/stdlib/builtins"
 
-(*) :: Num -> Num -> Num
+id x = x
 
-# main argv = 5 * 6.6
-main argv = 1 * 1
+main argv = 1 * (id 6.6)
 
 # vim: ts=4 sts=4 sw=4 et

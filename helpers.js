@@ -54,6 +54,22 @@ exports.bind = function (fn, scope) {
     };
 };
 
+exports.curried = function (fn) {
+    return function () {
+        if (arguments.length < fn.length) {
+            var args = [this].concat(_slice.call(arguments));
+            return exports.curried(
+                exports.bind.apply(exports.bind, [fn, args]));
+        } else {
+            return fn.apply(this, arguments);
+        }
+    };
+};
+
+exports.defun = function (obj, name, fn) {
+    obj[name] = exports.curried(fn);
+};
+
 exports.Context = (function () {
     function Context(g) {
         this.stack = [g || exports.clone(null)];
