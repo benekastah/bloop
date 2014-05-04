@@ -2,6 +2,79 @@
 var ast = require('./ast');
 var helpers = require('./helpers');
 
+exports.desugar = function (node) {
+    var state = {
+        typedefs: {}
+    };
+    ast.mutWalk(function (node) {
+        var fn = exports.desugar.actions[node.nodeType];
+        if (fn) {
+            return fn.apply(this, arguments);
+        }
+        return node;
+    }, node, state);
+};
+
+exports.desugar.actions = {
+    TypeDef: function (node) {
+        if (node.name in this.typedefs) {
+            throw new Error('Can\'t redefine type "' +
+                            node.name + '"');
+        }
+        this.typedefs[node.name] = node;
+
+        // Splice out this node
+        return [];
+    },
+
+    TypeSymbol: function (node) {
+        if (node.name in this.typedefs) {
+            return this.newVariable(
+                node.name, this.typedefs[node.name].type);
+        }
+        return node;
+    },
+
+    DataType: function (node) {
+        var results = [];
+        var tsym = ast.TypeSymbol(node.name);
+        for (var i = 0, len = node.constructors.length; i < len; i++) {
+            var ctor = node.constructors[i];
+
+            // Produce type annotation for constructor
+            var ctorSym = ast.Symbol(ctor.name);
+            var type;
+            if (ctor.arg_type) {
+                type = ast.FunctionType(ctor.arg_type, tsym);
+            } else {
+                type = tsym;
+            }
+            var typeAnn = ast.TypeAnnotation(ctorSym, type);
+            results.push(typeAnn);
+
+            // Produce definition for constructor
+            var def;
+            if (ctor.arg_type) {
+                var fn = ast.Function(
+                    ast.Symbol('arg'),
+                    ast.VarDef(
+                        ast.MemberAccess(
+                            ast._This(),
+                            ast.Symbol('arg')),
+                        ast.Symbol('arg')),
+                    tsym);
+                def = ast.VarDef(ctorSym, fn);
+            } else {
+                def = ast.VarDef(ctorSym, ast.Struct());
+            }
+            results.push(def);
+        }
+
+        // Splice in all constructor definitions in place of the DataType.
+        return results;
+    }
+};
+
 exports.TypeSystem = (function () {
     function TypeSystem() {
         this.context = new helpers.Context();
@@ -35,23 +108,36 @@ exports.TypeSystem = (function () {
         return result;
     };
 
-    proto.analyse = function (node) {
-        if (node.nodeType in this.analyse.actions) {
-            return this.analyse.actions[node.nodeType].call(this, node);
+    /**
+     * This function runs anything that should only happen once before kicking
+     * off the recursive analyse process.
+     */
+    proto.analyseNode = function (node) {
+        exports.desugar(node);
+        return this._analyse(node);
+    },
+
+    /**
+     * This function does all the analysing. Can be called recursively.
+     */
+    proto._analyse = function (node) {
+        if (node.nodeType in this._analyse.actions) {
+            return this._analyse.actions[node.nodeType].call(this, node);
         } else {
             throw new Error('Can\'t analyse "' + node.nodeType +
                             '": Unimplemented');
         }
     };
 
-    proto.analyse.actions = {
+    proto._analyse.actions = {
         Symbol: function (node) {
             return this.getType(node.name);
         },
 
         Application: function (node) {
-            var funtype = this.analyse(node.callable);
-            var argtype = this.analyse(node.arg);
+            debugger;
+            var funtype = this._analyse(node.callable);
+            var argtype = this._analyse(node.arg);
             var resulttype = this.newVariable();
             this.unify(ast.FunctionType(argtype, resulttype), funtype);
             return resulttype;
@@ -68,23 +154,65 @@ exports.TypeSystem = (function () {
         Function: function (node) {
             var argtype = this.newVariable();
             this.context.push();
+            node.context = this.context.capture();
             this.context.set(node.arg.name, argtype);
             this.nongen.push(argtype);
-            var resulttype = this.analyse(node.expr);
+            var resulttype;
+            if (node.data_constructor) {
+                resulttype = node.data_constructor;
+            } else {
+                resulttype = this._analyse(node.expr);
+            }
             this.context.pop();
             this.nongen.pop();
             return ast.FunctionType(argtype, resulttype);
         },
 
         VarDef: function (node) {
-            ast.assertTypeIs(node.left, 'Symbol');
-            var result = this.analyse(node.right);
-            this.context.set(node.left.name, result);
+            var result = this._analyse(node.right);
+            if (ast.typeIs(node.left, 'Symbol')) {
+                if (this.context.has(node.left.name)) {
+                    this.unify(result, this.context.get(node.left.name));
+                }
+                this.context.set(node.left.name, result);
+            } else if (ast.typeIs(node.left, 'MemberAccess')) {
+                var mem = node.left;
+                switch (mem.object.nodeType) {
+                    case 'Struct':
+                        mem.object.context.set(mem.member.name, result);
+                        break;
+
+                    case '_This': break;
+
+                    default: throw new Error(
+                        'Can\'t access member of type "' +
+                        mem.object.nodeType + '"');
+                }
+            } else {
+                throw new Error('Can\'t define to type "' + node.left.nodeType +
+                                '": Unimplemented');
+            }
+            return result;
+        },
+
+        Struct: function (node) {
+            this.context.push();
+            node.context = this.context.capture();
+            var result = ast.StructType();
+            for (var i = 0, len = node.defs.length; i < len; i++) {
+                var def = node.defs[i];
+                var type = this._analyse(def);
+                result.annotations.push(
+                    ast.TypeAnnotation(def.left, type));
+            }
+            this.context.pop();
             return result;
         },
 
         TypeAnnotation: function (node) {
             ast.assertTypeIs(node.symbol, 'Symbol');
+            // This stuff could go in the desugar function, but I think it's
+            // more topical here.
             var typeVars = {};
             ast.mutWalk(function (node) {
                 // Resolve user-defined type variables. Give new ones a
@@ -100,6 +228,10 @@ exports.TypeSystem = (function () {
                     }
                 } else if (ast.typeIs(node, 'AnyType')) {
                     return this.newVariable('Any');
+                } else if (ast.typeIs(node, 'TypeAnnotation')) {
+                    // Make sure each TypeAnnotation is processed in its own
+                    // context.
+                    this._analyse(node);
                 }
                 return node;
             }, node.type, this);
@@ -107,30 +239,10 @@ exports.TypeSystem = (function () {
             return null;
         },
 
-        TypeDef: function (node) {},
-
         Module: function (node) {
             var result;
-
-            var typedefs = {};
-            ast.mutWalk(function (node) {
-                if (ast.typeIs(node, 'TypeDef')) {
-                    if (node.name in typedefs) {
-                        throw new Error('Can\'t redefine type "' +
-                                        node.name + '"');
-                    }
-                    typedefs[node.name] = node;
-                } else if (ast.typeIs(node, 'TypeSymbol')) {
-                    if (node.name in typedefs) {
-                        return this.newVariable(
-                            node.name, typedefs[node.name].type);
-                    }
-                }
-                return node;
-            }, node, this);
-
             for (var i = 0, len = node.body.length; i < len; i++) {
-                result = this.analyse(node.body[i]);
+                result = this._analyse(node.body[i]);
             }
             return result;
         }
@@ -181,8 +293,8 @@ exports.TypeSystem = (function () {
         return this.nongen.indexOf(v) < 0;
     };
 
-    proto.typeMismatch = function (t1, t2) {
-        throw new TypeError(t1.toString() + ' ≠ ' + t2.toString());
+    proto.typeMismatch = function (t1, t2, cause) {
+        throw TypeError(t1.toString() + ' ≠ ' + t2.toString());
     };
 
     proto.checkTypeMismatch = function (t1, t2) {
@@ -212,7 +324,7 @@ exports.TypeSystem = (function () {
     proto.unify.actions = {
         TypeSymbol: function (type1, type2) {
             this.checkTypeMismatch(type1, type2);
-            if (!(type1 === type2 || type1.id === type2.id)) {
+            if (!(type1 === type2 || type1.name === type2.name)) {
                 this.typeMismatch(type1, type2);
             }
         },
@@ -231,6 +343,29 @@ exports.TypeSystem = (function () {
                 } catch (e) {}
             }
             this.typeMismatch(type1, type2);
+        },
+
+        StructType: function (type1, type2) {
+            this.checkTypeMismatch(type1, type2);
+            var annotations1 = {};
+            var annotations2 = {};
+            var len = type1.annotations.length;
+            if (len !== type2.annotations.length) {
+                this.typeMismatch(type1, type2);
+            }
+            for (var i = 0; i < len; i++) {
+                var ann1 = type1.annotations[i];
+                annotations1[ann1.symbol.name] = ann1;
+                var ann2 = type2.annotations[i];
+                annotations2[ann2.symbol.name] = ann2;
+            }
+
+            for (var name in annotations1) {
+                if (!(name in annotations2)) {
+                    this.typeMismatch(type1, type2);
+                }
+                this.unify(annotations1[name].type, annotations2[name].type);
+            }
         }
     };
 

@@ -77,6 +77,10 @@ exports.makeLexer = function () {
 
     addRule(lexer, /import/, 'IMPORT');
 
+    addRule(lexer, /\./, '.');
+
+    addRule(lexer, /data/, 'DATA');
+
     addRule(lexer, /[a-z_]\w*/, 'SYMBOL');
 
     addRule(lexer, /Any/, 'TYPE_ANY');
@@ -85,7 +89,13 @@ exports.makeLexer = function () {
 
     addRule(lexer, /let/, 'LET');
 
+    addRule(lexer, /\{/, '{');
+
+    addRule(lexer, /\}/, '}');
+
     addRule(lexer, /\|/, '|');
+
+    addRule(lexer, /,/, ',');
 
     addRule(lexer, /=/, '=');
 

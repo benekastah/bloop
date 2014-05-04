@@ -29,6 +29,14 @@ exports.map = function (a, fn, scope) {
     }
 };
 
+exports.first = function (a) {
+    return a[0];
+};
+
+exports.last = function (a) {
+    return a[a.length - 1];
+};
+
 var _toString = Object.prototype.toString;
 exports.type = function (x) {
     var t = _toString.call(x);
@@ -71,21 +79,41 @@ exports.defun = function (obj, name, fn) {
 };
 
 exports.Context = (function () {
-    function Context(g) {
+    function Context(g, mutable) {
+        if (mutable == null) {
+            mutable = true;
+        }
+        this.mutable = mutable;
         this.stack = [g || exports.clone(null)];
     }
 
     var proto = Context.prototype;
 
+    proto.first = function () {
+        return exports.first(this.stack);
+    };
+
     proto.last = function () {
-        return this.stack[this.stack.length - 1];
+        return exports.last(this.stack);
+    };
+
+    proto.capture = function () {
+        return new exports.Context(this.last(), false);
+    };
+
+    proto.assertMutable = function () {
+        if (!this.mutable) {
+            throw new Error('Can\'t modify immutable context');
+        }
     };
 
     proto.push = function () {
+        this.assertMutable();
         this.stack.push(exports.clone(this.last()));
     };
 
     proto.pop = function () {
+        this.assertMutable();
         this.stack.pop();
     };
 
@@ -101,6 +129,7 @@ exports.Context = (function () {
     };
 
     proto.set = function (name, val) {
+        this.assertMutable();
         var ctx;
         if (this.has(name)) {
             for (var i = this.stack.length - 1; i >= 0; i--) {
@@ -117,10 +146,107 @@ exports.Context = (function () {
     };
 
     proto.setGlobal = function (name, val) {
+        this.assertMutable();
         this.stack[0][name] = val;
     };
 
     return Context;
+})();
+
+exports.Argv = (function () {
+    var displayArg = function (a) {
+        if (a.length > 1) {
+            return '--' + a;
+        } else {
+            return '-' + a;
+        }
+    };
+
+    function Option(config) {
+        this.names = config.names;
+        if (!this.names) {
+            throw 'The names config property is required';
+        }
+        this.property = config.property || this.names[0];
+        this.helpText = config.helpText || '';
+        this.required = config.required;
+    }
+
+    Option.prototype.toString = function () {
+        var names = this.names.map(displayArg);
+        return names.join(', ') + ': ' + this.helpText;
+    };
+
+    function ArgumentError(msg) {
+        this.message = msg;
+    }
+
+    function Argv(config) {
+        this.__config = config;
+        this.__takenNames = {};
+        this.__options = config.options.map(function (config) {
+            var opt = new Option(config);
+            opt.names.forEach(function (name) {
+                if (name in this.__takenNames) {
+                    throw 'Option name already taken: ' + name;
+                } else {
+                    this.__takenNames[name] = true;
+                }
+            }.bind(this));
+            return opt;
+        }.bind(this));
+    }
+
+    Argv.prototype.catchErr = function (fn) {
+        try {
+            fn.call(this);
+        } catch (e) {
+            if (e instanceof ArgumentError) {
+                this.showHelp(e.message);
+            } else {
+                throw e;
+            }
+        }
+    };
+
+    Argv.prototype.showHelp = function (err) {
+        if (err) {
+            console.log(err + '\n');
+        }
+        console.log('' + this);
+        process.exit(err ? 1 : 0);
+    };
+
+    Argv.prototype.parse = function (argv) {
+        this.__program = argv[1];
+        this.__argv = require('minimist')(argv.slice(2));
+        if ((!('h' in this.__takenNames) && this.__argv.h) ||
+                (!('help' in this.__takenNames) && this.__argv.help)) {
+                    this.showHelp();
+                }
+        this.catchErr(function () {
+            this.__options.forEach(function (opt) {
+                var names = opt.names.slice();
+                while (!(opt.property in this)) {
+                    if (!names.length) {
+                        if (opt.required) {
+                            throw new ArgumentError(
+                                displayArg(opt.names[0]) +
+                                ' is a required argument');
+                        }
+                        break;
+                    }
+                    this[opt.property] = this.__argv[names.shift()];
+                }
+            }.bind(this));
+        });
+    };
+
+    Argv.prototype.toString = function () {
+        return this.__config.usage + '\n\n' + this.__options.join('\n');
+    };
+
+    return Argv;
 })();
 
 // vim: ts=4 sts=4 sw=4 et

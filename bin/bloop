@@ -3,26 +3,70 @@
 var fs = require('fs');
 var util = require('util');
 
-var argv = require('minimist')(process.argv.slice(2));
-
 var bloop = require('../index');
 var helpers = require('../helpers');
+var verifier = require('../verifier');
 
-var infile = argv.c;
-var outfile = argv.o;
-var mangle = argv.m;
-var optimize = argv.O;
+var argv = new helpers.Argv({
+    usage: 'bloop [options]',
+    options: [{
+        names: ['c'],
+        property: 'infile',
+        helpText: 'The file to compile',
+        required: true
+    }, {
+        names: ['o'],
+        property: 'outfile',
+        helpText: 'The result file from a compile operation'
+    }, {
+        names: ['m'],
+        property: 'mangle',
+        helpText: 'Whether to mangle the javascript ast before code generation'
+    }, {
+        names: ['O'],
+        property: 'optimize',
+        helpText: 'Whether to optimize the javascript ast before code generation'
+    }, {
+        names: ['T', 'show-type-info'],
+        property: 'showTypeInfo',
+        helpText: 'Print the type analysis and exit'
+    }, {
+        names: ['J', 'show-js-ast'],
+        property: 'showJsAst',
+        helpText: 'Print the resulting js ast and exit'
+    }, {
+        names: ['B', 'show-bloop-ast'],
+        property: 'showBloopAst',
+        helpText: 'Print the parsed bloop ast and exit'
+    }, {
+        names: ['D', 'show-bloop-ast-desugared'],
+        property: 'showBloopAstDesugared',
+        helpText: 'Print the parsed and desugared bloop ast and exit'
+    }]
+});
 
-var showTypeInfo = argv.T || argv['show-type-info'];
-var showJsAst = argv.J || argv['show-js-ast'];
+argv.parse(process.argv);
 
-fs.readFile(infile, 'utf8', function (err, data) {
+var showBloopAst = function (data, desugar) {
+    var parsed = bloop.parser.parse(data);
+    if (desugar) {
+        verifier.desugar(parsed);
+    }
+    helpers.log(parsed);
+    process.exit();
+};
+
+fs.readFile(argv.infile, 'utf8', function (err, data) {
     if (err) {
         throw err;
     }
 
+    if (argv.showBloopAst || argv.showBloopAstDesugared) {
+        showBloopAst(data, argv.showBloopAstDesugared);
+    }
+
     var compiler = bloop.getCompiler(data);
-    if (showTypeInfo) {
+    if (argv.showTypeInfo) {
         compiler.analyseTypes();
         var context = compiler.typeSystem.context.last();
         for (var prop in context) {
@@ -32,18 +76,18 @@ fs.readFile(infile, 'utf8', function (err, data) {
     }
 
     var result = bloop.compile(compiler, {
-        optimize: optimize,
-        mangle: mangle,
-        getAst: showJsAst
+        optimize: argv.optimize,
+        mangle: argv.mangle,
+        getAst: argv.showJsAst
     });
 
-    if (showJsAst) {
+    if (argv.showJsAst) {
         helpers.log(result);
         process.exit();
     }
 
-    if (outfile) {
-        fs.writeFile(outfile, result, function (err) {
+    if (argv.outfile) {
+        fs.writeFile(argv.outfile, result, function (err) {
             if (err) { throw err; }
         });
     } else {

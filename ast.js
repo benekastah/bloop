@@ -27,12 +27,12 @@ var makeAst = function (nodeType, config) {
         };
 
     var base = {
-        toString: toString,
-        nodeType: nodeType
+        toString: toString
     };
 
     var astFn = exports[nodeType] = function () {
         var ast = helpers.clone(base);
+        ast.nodeType = nodeType;
         if (init) {
             init.apply(ast, arguments);
         } else {
@@ -144,7 +144,12 @@ exports.mutWalk = function mutWalk(action, node, scope) {
             if (index == null) {
                 parentNode[prop] = result;
             } else {
-                parentNode[prop][index] = result;
+                if (helpers.type(result) === 'Array') {
+                    var args = [index, 1].concat(result);
+                    parentNode[prop].splice.apply(parentNode[prop], args);
+                } else {
+                    parentNode[prop][index] = result;
+                }
             }
             return false;
         }
@@ -153,74 +158,8 @@ exports.mutWalk = function mutWalk(action, node, scope) {
 
 
 /**
- * Define ast objects here
+ * TYPES
  */
-
-makeAst('Module', {
-    props: ['body']
-});
-
-makeAst('Import', {
-    props: ['moduleName']
-});
-
-makeAst('Symbol', {
-    props: ['name'],
-    propsData: {
-        name: {walkable: false}
-    },
-    propsData: {
-        name: {walkable: false}
-    }
-});
-
-makeAst('TypeSymbol', {
-    props: ['name'],
-    propsData: {
-        name: {walkable: false},
-    },
-    toString: function () {
-        return this.name;
-    }
-});
-
-makeAst('TypeDef', {
-    props: ['name', 'type'],
-    propsData: {
-        name: {walkable: false}
-    }
-});
-
-var stringEscapedChars = {
-    '"': '"',
-    '\\': '\\',
-    b: '\b',
-    f: '\f',
-    n: '\n',
-    r: '\r',
-    t: '\t',
-    v: '\v'
-};
-
-var re_escape = /\\(.)/g;
-
-makeAst('String', {
-    props: ['value'],
-    propsData: {
-        value: {walkable: false}
-    },
-    init: function (value) {
-        value = value.substring(1, value.length - 1);
-        value = value.replace(re_escape, function (match, sub) {
-            if (sub in stringEscapedChars) {
-                return stringEscapedChars[sub];
-            } else {
-                throw new Error('Invalid string');
-            }
-        });
-        this.value = value;
-    }
-});
 
 makeAst('OrType', {
     props: ['type1', 'type2'],
@@ -281,7 +220,10 @@ exports.makeTypeVariable = function (id, name, type) {
 };
 
 makeAst('TypeAnnotation', {
-    props: ['symbol', 'type']
+    props: ['symbol', 'type'],
+    toString: function () {
+        return this.symbol + ' :: ' + this.type;
+    }
 });
 
 makeAst('FunctionType', {
@@ -291,12 +233,129 @@ makeAst('FunctionType', {
     },
 });
 
+makeAst('TypeSymbol', {
+    props: ['name'],
+    propsData: {
+        name: {walkable: false},
+    },
+    toString: function () {
+        return this.name;
+    }
+});
+
+makeAst('TypeDef', {
+    props: ['name', 'type'],
+    propsData: {
+        name: {walkable: false}
+    }
+});
+
+makeAst('DataType', {
+    props: ['name', 'constructors'],
+    propsData: {
+        name: {walkable: false}
+    }
+});
+
+makeAst('DataTypeConstructor', {
+    props: ['name', 'arg_type'],
+    propsData: {
+        name: {walkable: false}
+    }
+});
+
+makeAst('StructType', {
+    props: ['annotations'],
+    init: function (ann) {
+        this.annotations = ann || [];
+    },
+    toString: function () {
+        return '{' + this.annotations.join(', ') + '}';
+    }
+});
+
+/**
+ * PROGRAM/STATEMENTS
+ */
+
+makeAst('Module', {
+    props: ['body']
+});
+
+makeAst('Import', {
+    props: ['importPath']
+});
+
 makeAst('VarDef', {
     props: ['left', 'right']
 });
 
+/**
+ * VALUES
+ */
+
+makeAst('Symbol', {
+    props: ['name'],
+    propsData: {
+        name: {walkable: false}
+    },
+    toString: function () {
+        return this.name;
+    }
+});
+
+makeAst('Struct', {
+    props: ['defs'],
+    init: function (defs) {
+        this.defs = defs || [];
+    }
+});
+
+// This is not meant to be exposed to end users
+makeAst('_This', {
+    props: []
+});
+
+makeAst('MemberAccess', {
+    props: ['object', 'member']
+});
+
+var stringEscapedChars = {
+    '"': '"',
+    '\\': '\\',
+    b: '\b',
+    f: '\f',
+    n: '\n',
+    r: '\r',
+    t: '\t',
+    v: '\v'
+};
+
+var re_escape = /\\(.)/g;
+
+makeAst('String', {
+    props: ['value'],
+    propsData: {
+        value: {walkable: false}
+    },
+    init: function (value) {
+        value = value.substring(1, value.length - 1);
+        value = value.replace(re_escape, function (match, sub) {
+            if (sub in stringEscapedChars) {
+                return stringEscapedChars[sub];
+            } else {
+                throw new Error('Invalid string');
+            }
+        });
+        this.value = value;
+    }
+});
+
 makeAst('Function', {
-    props: ['arg', 'expr']
+    props: ['arg', 'expr', 'data_constructor'],
+    propsData: {
+        data_constructor: {walkable: false}
+    }
 });
 
 exports.makeFunction = function makeFunction(args, expr) {
@@ -310,7 +369,10 @@ exports.makeFunction = function makeFunction(args, expr) {
 };
 
 makeAst('Application', {
-    props: ['callable', 'arg'],
+    props: ['callable', 'arg', 'data_constructor'],
+    propsData: {
+        data_constructor: {walkable: false}
+    },
     toString: function () {
         return '' + this.callable + ' ' + this.arg;
     }

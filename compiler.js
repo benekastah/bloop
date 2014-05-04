@@ -18,13 +18,14 @@ exports.Compiler = (function () {
             this.typeSystem = new verifier.TypeSystem();
         }
         this.analysed = false;
+        this.typeContexts = [this.typeSystem.context.first()];
     }
 
     var proto = Compiler.prototype;
 
     proto.analyseTypes = function () {
         if (!this.analyse) {
-            this.typeSystem.analyse(this.module);
+            this.typeSystem.analyseNode(this.module);
             this.analysed = true;
         }
     };
@@ -129,11 +130,13 @@ exports.Compiler = (function () {
         TypeAnnotation: function (node) {},
 
         VarDef: function (node) {
-            ast.assertTypeIs(node.left, 'Symbol');
-            return jsAst.VariableDeclaration([
-                this.compileNode(node.left),
-                this.compileNode(node.right)
-            ]);
+            var cleft = this.compileNode(node.left),
+                cright = this.compileNode(node.right);
+            if (ast.typeIs(node.left, 'Symbol')) {
+                return jsAst.VariableDeclaration([cleft, cright]);
+            } else if (ast.typeIs(node.left, 'MemberAccess')) {
+                return jsAst.AssignmentExpression('=', cleft, cright);
+            }
         },
 
         Symbol: function (node) {
@@ -153,41 +156,49 @@ exports.Compiler = (function () {
         },
 
         Function: function (node) {
+            this.typeContexts.push(node.context);
+            var cexpr = this.compileNode(node.expr),
+                stmt;
+            if (node.data_constructor) {
+                stmt = jsAst.toStatement(cexpr);
+            } else {
+                stmt = jsAst.ReturnStatement(cexpr);
+            }
             return jsAst.FunctionExpression(
                 [this.compileNode(node.arg)],
-                jsAst.BlockStatement(
-                    jsAst.ReturnStatement(this.compileNode(node.expr))));
+                jsAst.BlockStatement(stmt));
         },
 
-//         FunctionType: function (node) {
-//             return jsAst.ObjectExpression(
-//                 ['nodeType', jsAst.Literal(node.nodeType)],
-//                 ['arg', this.compileNode(node.arg)],
-//                 ['ret', this.compileNode(node.ret)]
-//             );
-//         },
-//
-//         TypeVariable: function (node) {
-//             return jsAst.ObjectExpression(
-//                 ['nodeType', jsAst.Literal(node.nodeType)],
-//                 ['id', jsAst.Literal(node.id)],
-//                 ['name', jsAst.Literal(node.name)]
-//             );
-//         },
+        Struct: function (node) {
+            return jsAst.ObjectExpression(
+                helpers.map(node.defs, function (def) {
+                    return jsAst.Property(
+                        this.compileNode(def.left),
+                        this.compileNode(def.right),
+                        'init');
+                }, this)
+            );
+        },
+
+        MemberAccess: function (node) {
+            return jsAst.MemberExpression(
+                this.compileNode(node.object),
+                this.compileNode(node.member));
+        },
+
+        _This: function (node) {
+            return jsAst.ThisExpression();
+        },
 
         TypeSymbol: function (node) {
             return jsAst.Identifier(node.name);
         },
 
-//         OrType: function (node) {
-//             return jsAst.ObjectExpression(
-//                 ['nodeType', jsAst.Literal(node.nodeType)],
-//                 ['type1', this.compileNode(node.type1)],
-//                 ['type2', this.compileNode(node.type2)])
-//         },
-
         Application: function (node) {
-            return jsAst.CallExpression(
+            var jsType = node.data_constructor ?
+                'NewExpression' :
+                'CallExpression';
+            return jsAst[jsType](
                 this.compileNode(node.callable),
                 this.compileNode(node.arg));
         }

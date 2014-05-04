@@ -37,14 +37,20 @@ exports.toStatement = function (x) {
     }
 };
 
-makeAstMethod('ObjectExpression', function () {
-    this.properties = [];
-    for (var i = 0, len = arguments.length; i < len; i++) {
-        var prop = arguments[i];
-        this.properties.push(exports.Property(
-            exports.Identifier(prop[0]),
-            prop[1],
-            'init'));
+makeAstMethod('ObjectExpression', function (props) {
+    this.properties = props;
+    for (var i = 0, len = this.properties.length; i < len; i++) {
+        var prop = this.properties[i];
+        if (prop && prop.type === 'Property') {
+            continue;
+        } else if (helpers.type(prop) === 'Array') {
+            this.properties[i] = exports.Property(
+                exports.Identifier(prop[0]),
+                prop[1],
+                'init');
+        } else {
+            throw new TypeError(prop);
+        }
     }
 });
 
@@ -71,10 +77,14 @@ makeAstMethod('FunctionExpression', function (params, body) {
     this.body = body;
 });
 
-makeAstMethod('CallExpression', function (callee) {
+var callExpression = function (callee) {
     this.callee = callee;
     this.arguments = helpers.slice(arguments, 1);
-});
+};
+
+makeAstMethod('CallExpression', callExpression);
+
+makeAstMethod('NewExpression', callExpression);
 
 makeAstMethod('ReturnStatement', function (argument) {
     this.argument = argument;
@@ -92,15 +102,26 @@ makeAstMethod('VariableDeclarator', function (id, init) {
     this.init = init;
 });
 
+makeAstMethod('AssignmentExpression', function (op, left, right) {
+    this.operator = op;
+    this.left = left;
+    this.right = right;
+});
+
 makeAstMethod('MemberExpression', function (obj, prop) {
     var args = helpers.slice(arguments, 2);
     this.object = obj;
+    if (helpers.type(prop) !== 'Array') {
+        prop = [prop, false];
+    }
     this.property = prop[0];
     this.computed = prop[1];
     if (args.length) {
         return exports.MemberExpression.apply(null, [this].concat(args));
     }
 });
+
+makeAstMethod('ThisExpression');
 
 makeAstMethod('Program', function (body) {
     this.body = body;
